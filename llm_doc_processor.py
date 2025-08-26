@@ -16,8 +16,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import List, Optional, Tuple
 import PyPDF2
-from transformers import pipeline, AutoProcessor, AutoModelForCausalLM
-import torch
+import ollama
 from tqdm import tqdm
 
 
@@ -124,29 +123,32 @@ class ProgressBar:
 
 class LLMDocumentProcessor:
     def __init__(self, logger: Logger = None, verbose: bool = False):
-        self.model = None
-        self.processor = None
+        self.model_name = 'llama3.2-vision'
         self.logger = logger if logger else Logger(verbose, False)
         self.verbose = verbose
-        self._load_model()
+        self._check_model_availability()
     
-    def _load_model(self):
-        """Load the Llama 3.2 Vision model"""
+    def _check_model_availability(self):
+        """Check if the Llama 3.2 Vision model is available in Ollama"""
         try:
-            self.logger.info("Loading Llama 3.2 Vision model...")
-            model_name = "meta-llama/Llama-3.2-11B-Vision-Instruct"
-            self.processor = AutoProcessor.from_pretrained(model_name)
-            self.model = AutoModelForCausalLM.from_pretrained(
-                model_name,
-                torch_dtype=torch.float16,
-                device_map="auto",
-                trust_remote_code=True
-            )
-            self.logger.info("Model loaded successfully")
+            self.logger.info(f"Checking availability of {self.model_name} model in Ollama...")
+            
+            # Try to list available models to check if our model exists
+            models = ollama.list()
+            available_models = [model['name'] for model in models['models']]
+            
+            if any(self.model_name in model for model in available_models):
+                self.logger.info(f"Model {self.model_name} is available in Ollama")
+            else:
+                self.logger.warning(f"Model {self.model_name} not found in Ollama. Available models: {available_models}")
+                self.logger.info(f"Attempting to pull {self.model_name} model...")
+                ollama.pull(self.model_name)
+                self.logger.info(f"Successfully pulled {self.model_name} model")
+                
         except Exception as e:
-            self.logger.error(f"Error loading model: {e}")
-            self.logger.info("Using fallback text generation pipeline")
-            self.model = pipeline("text-generation", model="microsoft/DialoGPT-medium")
+            self.logger.error(f"Error checking model availability: {e}")
+            self.logger.warning("Please ensure Ollama is running and the llama3.2-vision model is available")
+            raise
     
     def _read_text_file(self, filepath: str) -> str:
         """Read content from a text file"""
@@ -197,40 +199,44 @@ class LLMDocumentProcessor:
             return self._read_text_file(filepath)
     
     def _generate_response(self, prompt: str, documents: List[str]) -> str:
-        """Generate AI response using the prompt and documents"""
-        self.logger.info("Generating AI response...")
-        combined_input = f"{prompt}\n\nDocuments to process:\n\n"
+        """Generate AI response using the prompt and documents via Ollama"""
+        self.logger.info("Generating AI response using Ollama...")
         
+        # Construct the message content
+        combined_content = f"{prompt}\n\nDocuments to process:\n\n"
         for i, doc_content in enumerate(documents, 1):
-            combined_input += f"Document {i}:\n{doc_content}\n\n"
+            combined_content += f"Document {i}:\n{doc_content}\n\n"
         
-        self.logger.debug(f"Combined input length: {len(combined_input)} characters")
+        self.logger.debug(f"Combined input length: {len(combined_content)} characters")
         
         try:
-            if hasattr(self.model, 'generate'):
-                self.logger.debug("Using transformer model for generation")
-                inputs = self.processor(combined_input, return_tensors="pt")
-                with torch.no_grad():
-                    outputs = self.model.generate(
-                        **inputs,
-                        max_new_tokens=2000,
-                        temperature=0.7,
-                        do_sample=True,
-                        pad_token_id=self.processor.tokenizer.eos_token_id
-                    )
-                response = self.processor.decode(outputs[0], skip_special_tokens=True)
-                result = response[len(combined_input):].strip()
+            self.logger.debug(f"Using Ollama model: {self.model_name}")
+            
+            # Prepare the message for Ollama
+            messages = [{
+                'role': 'user',
+                'content': combined_content
+            }]
+            
+            # Call Ollama chat API
+            response = ollama.chat(
+                model=self.model_name,
+                messages=messages
+            )
+            
+            # Extract the response content
+            if 'message' in response and 'content' in response['message']:
+                result = response['message']['content'].strip()
             else:
-                self.logger.debug("Using pipeline model for generation")
-                result = self.model(combined_input, max_length=len(combined_input) + 500, num_return_sequences=1)
-                result = result[0]['generated_text'][len(combined_input):].strip()
+                result = str(response).strip()
             
             self.logger.info(f"AI response generated successfully ({len(result)} characters)")
             return result
+            
         except Exception as e:
-            error_msg = f"Error generating response: {e}"
+            error_msg = f"Error generating response with Ollama: {e}"
             self.logger.error(error_msg)
-            return f"{error_msg}\n\nInput was:\n{combined_input}"
+            return f"{error_msg}\n\nInput was:\n{combined_content}"
     
     def _save_markdown(self, content: str) -> str:
         """Save the AI response to a markdown file"""
