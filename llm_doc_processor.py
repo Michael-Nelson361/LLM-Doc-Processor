@@ -134,13 +134,39 @@ class LLMDocumentProcessor:
             self.logger.info(f"Checking availability of {self.model_name} model in Ollama...")
             
             # Try to list available models to check if our model exists
-            models = ollama.list()
-            available_models = [model['name'] for model in models['models']]
+            models_response = ollama.list()
+            self.logger.debug(f"Ollama list response: {models_response}")
             
-            if any(self.model_name in model for model in available_models):
+            # Handle the response structure correctly
+            available_models = []
+            if hasattr(models_response, 'models') and models_response.models:
+                # Extract model names from the models list (newer ollama-python format)
+                for model in models_response.models:
+                    if hasattr(model, 'model'):
+                        available_models.append(model.model)
+                    elif hasattr(model, 'name'):
+                        available_models.append(model.name)
+                    else:
+                        self.logger.warning(f"Unexpected model format: {model}")
+            elif isinstance(models_response, dict) and 'models' in models_response:
+                # Extract model names from the models list (older format)
+                for model in models_response['models']:
+                    if isinstance(model, dict) and 'name' in model:
+                        available_models.append(model['name'])
+                    else:
+                        self.logger.warning(f"Unexpected model format: {model}")
+            else:
+                self.logger.warning(f"Unexpected response format from ollama.list(): {models_response}")
+                # Fallback: if it's not the expected format, still continue
+            
+            if available_models and any(self.model_name in model for model in available_models):
                 self.logger.info(f"Model {self.model_name} is available in Ollama")
             else:
-                self.logger.warning(f"Model {self.model_name} not found in Ollama. Available models: {available_models}")
+                if available_models:
+                    self.logger.warning(f"Model {self.model_name} not found in Ollama. Available models: {available_models}")
+                else:
+                    self.logger.warning(f"Could not determine available models. Attempting to use {self.model_name} anyway.")
+                
                 self.logger.info(f"Attempting to pull {self.model_name} model...")
                 ollama.pull(self.model_name)
                 self.logger.info(f"Successfully pulled {self.model_name} model")
@@ -148,7 +174,8 @@ class LLMDocumentProcessor:
         except Exception as e:
             self.logger.error(f"Error checking model availability: {e}")
             self.logger.warning("Please ensure Ollama is running and the llama3.2-vision model is available")
-            raise
+            # Don't raise the exception to allow the program to continue
+            self.logger.info("Continuing execution despite model availability check failure")
     
     def _read_text_file(self, filepath: str) -> str:
         """Read content from a text file"""

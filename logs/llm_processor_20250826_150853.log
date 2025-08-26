@@ -1,0 +1,11 @@
+2025-08-26 15:08:53,088 - INFO - SYSTEM_OUTPUT: LLM Document Processor - Interactive Mode
+2025-08-26 15:08:53,089 - INFO - SYSTEM_OUTPUT: Enter file paths (empty line to finish):
+2025-08-26 15:09:04,329 - INFO - USER_PROMPT: Prompt file:
+2025-08-26 15:09:04,330 - INFO - USER_RESPONSE: "C:\Users\Nelson_A\OneDrive\Documents\Projects\LLM-Doc-Processor\test files\input_prompt.txt"
+2025-08-26 15:09:10,904 - INFO - USER_PROMPT: Document 1:
+2025-08-26 15:09:10,905 - INFO - USER_RESPONSE: "C:\Users\Nelson_A\OneDrive\Documents\Projects\LLM-Doc-Processor\test files\[CH1] Race - 2012 - Goodman Extract[15-20].pdf"
+2025-08-26 15:09:11,278 - INFO - USER_PROMPT: Document 2:
+2025-08-26 15:09:11,279 - INFO - USER_RESPONSE: 
+2025-08-26 15:09:11,279 - INFO - Checking availability of llama3.2-vision model in Ollama...
+2025-08-26 15:09:11,384 - ERROR - Error checking model availability: 'name'
+2025-08-26 15:09:11,384 - WARNING - Please ensure Ollama is running and the llama3.2-vision model is available
