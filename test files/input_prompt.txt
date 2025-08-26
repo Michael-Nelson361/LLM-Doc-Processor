@@ -1,0 +1,6 @@
+You are provided with a document. Your task is to generate a very concise context for the document—a brief introduction that captures its essential ideas and themes. Follow these instructions:
+1. Read the document carefully to identify its key themes, primary ideas, and notable timeline elements.
+2. Write a short paragraph consisting of 2 to 3 very short sentences that provide a clear and direct overview of the document's content.
+3. If the document includes a chapter title, refer to that title only. Do not use or confuse it with any broader titles (e.g., book titles).
+4. Mention the document or reading only once in your summary. Avoid any repetition or extraneous references.
+5. Do not include any commentary or analysis—only the essential context needed for a quick introduction.
