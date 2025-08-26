@@ -72,6 +72,32 @@ class Logger:
     
     def warning(self, message: str):
         self.logger.warning(message)
+    
+    def user_interaction(self, prompt_msg: str, response: str):
+        """Log user interactions (prompt and response)"""
+        self.logger.info(f"USER_PROMPT: {prompt_msg}")
+        self.logger.info(f"USER_RESPONSE: {response}")
+    
+    def system_output(self, message: str):
+        """Log system output that is shown to user"""
+        self.logger.info(f"SYSTEM_OUTPUT: {message}")
+
+
+class InteractiveIO:
+    """Wrapper for interactive input/output with logging"""
+    def __init__(self, logger: Logger):
+        self.logger = logger
+    
+    def print(self, message: str):
+        """Print message to console and log it"""
+        print(message)
+        self.logger.system_output(message)
+    
+    def input(self, prompt: str) -> str:
+        """Get user input and log the interaction"""
+        user_response = input(prompt).strip()
+        self.logger.user_interaction(prompt.rstrip(), user_response)
+        return user_response
 
 
 class ProgressBar:
@@ -97,10 +123,10 @@ class ProgressBar:
 
 
 class LLMDocumentProcessor:
-    def __init__(self, verbose: bool = False, cleanup_logs: bool = False):
+    def __init__(self, logger: Logger = None, verbose: bool = False):
         self.model = None
         self.processor = None
-        self.logger = Logger(verbose, cleanup_logs)
+        self.logger = logger if logger else Logger(verbose, False)
         self.verbose = verbose
         self._load_model()
     
@@ -273,22 +299,32 @@ class LLMDocumentProcessor:
             raise
 
 
-def get_file_paths_interactive(verbose: bool = False) -> List[str]:
+def get_file_paths_interactive(verbose: bool = False, logger: Logger = None) -> List[str]:
     """Get file paths interactively from user input"""
     file_paths = []
     
-    if verbose:
-        print("LLM Document Processor")
-        print("Enter file paths one by one (press Enter with no input to finish):")
+    # Create interactive IO wrapper if logger provided
+    if logger:
+        io = InteractiveIO(logger)
     else:
-        print("LLM Document Processor - Interactive Mode")
-        print("Enter file paths (empty line to finish):")
+        # Fallback for cases without logger
+        class SimpleIO:
+            def print(self, msg): print(msg)
+            def input(self, prompt): return input(prompt).strip()
+        io = SimpleIO()
+    
+    if verbose:
+        io.print("LLM Document Processor")
+        io.print("Enter file paths one by one (press Enter with no input to finish):")
+    else:
+        io.print("LLM Document Processor - Interactive Mode")
+        io.print("Enter file paths (empty line to finish):")
     
     while True:
         if not file_paths:
-            filepath = input("Prompt file: ").strip()
+            filepath = io.input("Prompt file: ")
         else:
-            filepath = input(f"Document {len(file_paths)}: ").strip()
+            filepath = io.input(f"Document {len(file_paths)}: ")
         
         if not filepath:
             break
@@ -298,7 +334,7 @@ def get_file_paths_interactive(verbose: bool = False) -> List[str]:
     return file_paths
 
 
-def process_documents(file_paths: List[str], verbose: bool = False, cleanup_logs: bool = False) -> Tuple[str, bool]:
+def process_documents(file_paths: List[str], verbose: bool = False, cleanup_logs: bool = False, logger: Logger = None) -> Tuple[str, bool]:
     """
     Process documents using AI according to a prompt.
     
@@ -307,12 +343,15 @@ def process_documents(file_paths: List[str], verbose: bool = False, cleanup_logs
                    and the rest are documents to process
         verbose: Whether to show verbose output
         cleanup_logs: Whether to clean up existing log files
+        logger: Existing logger instance to use
     
     Returns:
         Tuple of (output_file_path, success_status)
     """
     try:
-        processor = LLMDocumentProcessor(verbose, cleanup_logs)
+        if not logger:
+            logger = Logger(verbose, cleanup_logs)
+        processor = LLMDocumentProcessor(logger, verbose)
         output_path = processor.process_documents(file_paths)
         return output_path, True
     except Exception as e:
@@ -329,10 +368,13 @@ def main():
     args = parser.parse_args()
     
     try:
+        # Create single logger instance for the entire runtime
+        main_logger = Logger(args.verbose, args.cleanup_logs)
+        
         if args.files:
             file_paths = args.files
         else:
-            file_paths = get_file_paths_interactive(args.verbose)
+            file_paths = get_file_paths_interactive(args.verbose, main_logger)
         
         if not file_paths:
             if not args.verbose:
@@ -342,20 +384,20 @@ def main():
         if not args.verbose:
             print("Processing documents...")
         
-        output_path, success = process_documents(file_paths, args.verbose, args.cleanup_logs)
+        output_path, success = process_documents(file_paths, args.verbose, False, main_logger)  # Don't cleanup again
         
         if success:
-            print(f"✓ Processing completed successfully")
+            print(f"[SUCCESS] Processing completed successfully")
             if args.verbose:
                 print(f"Output saved to: {output_path}")
         else:
-            print(f"✗ Processing failed: {output_path}")
+            print(f"[ERROR] Processing failed: {output_path}")
             sys.exit(1)
             
     except KeyboardInterrupt:
-        print("\n✗ Operation cancelled by user.")
+        print("\n[CANCELLED] Operation cancelled by user.")
     except Exception as e:
-        print(f"✗ Unexpected error: {e}")
+        print(f"[ERROR] Unexpected error: {e}")
         sys.exit(1)
 
 
