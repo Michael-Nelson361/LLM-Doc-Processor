@@ -271,8 +271,12 @@ class LLMDocumentProcessor:
             self.logger.error(error_msg)
             return f"{error_msg}\n\nInput was:\n{combined_content}"
     
-    def _save_markdown(self, content: str) -> str:
-        """Save the AI response to a markdown file"""
+    def _save_markdown(self, content: str) -> Tuple[str, str]:
+        """Save the AI response to a markdown file
+        
+        Returns:
+            Tuple of (filename, absolute_filepath)
+        """
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         output_filename = f"llm_output_{timestamp}.md"
         output_path = Path(output_filename)
@@ -282,22 +286,22 @@ class LLMDocumentProcessor:
             with open(output_path, 'w', encoding='utf-8') as file:
                 file.write(content)
             self.logger.info(f"Successfully saved markdown file: {output_path.absolute()}")
-            return str(output_path.absolute())
+            return output_filename, str(output_path.absolute())
         except Exception as e:
             error_msg = f"Error saving markdown file: {e}"
             self.logger.error(error_msg)
             raise ValueError(error_msg)
     
-    def process_documents(self, file_paths: List[str]) -> str:
+    def process_documents(self, file_paths: List[str]) -> Tuple[str, str]:
         """
-        Process documents according to a prompt and return the output file path.
+        Process documents according to a prompt and return the output file info.
         
         Args:
             file_paths: List of file paths where the first is the prompt file
                        and the rest are documents to process
         
         Returns:
-            Path to the generated markdown file
+            Tuple of (filename, absolute_filepath) of the generated markdown file
         """
         if not file_paths or len(file_paths) < 1:
             error_msg = "At least one file path (prompt file) must be provided"
@@ -326,12 +330,12 @@ class LLMDocumentProcessor:
             response = self._generate_response(prompt, documents)
             
             progress.update("Saving output")
-            output_path = self._save_markdown(response)
+            output_filename, output_path = self._save_markdown(response)
             
             progress.close()
             self.logger.info(f"Document processing completed successfully")
             
-            return output_path
+            return output_filename, output_path
         except Exception as e:
             progress.close()
             self.logger.error(f"Document processing failed: {e}")
@@ -382,7 +386,7 @@ def get_file_paths_interactive(verbose: bool = False, logger: Logger = None) -> 
     return file_paths
 
 
-def process_documents(file_paths: List[str], verbose: bool = False, cleanup_logs: bool = False, logger: Logger = None) -> Tuple[str, bool]:
+def process_documents(file_paths: List[str], verbose: bool = False, cleanup_logs: bool = False, logger: Logger = None) -> Tuple[Tuple[str, str], bool]:
     """
     Process documents using AI according to a prompt.
     
@@ -394,16 +398,17 @@ def process_documents(file_paths: List[str], verbose: bool = False, cleanup_logs
         logger: Existing logger instance to use
     
     Returns:
-        Tuple of (output_file_path, success_status)
+        Tuple of ((filename, filepath), success_status) for success
+        Tuple of ((error_message, ""), False) for failure
     """
     try:
         if not logger:
             logger = Logger(verbose, cleanup_logs)
         processor = LLMDocumentProcessor(logger, verbose)
-        output_path = processor.process_documents(file_paths)
-        return output_path, True
+        output_filename, output_path = processor.process_documents(file_paths)
+        return (output_filename, output_path), True
     except Exception as e:
-        return str(e), False
+        return (str(e), ""), False
 
 
 def main():
@@ -432,14 +437,14 @@ def main():
         if not args.verbose:
             print("Processing documents...")
         
-        output_path, success = process_documents(file_paths, args.verbose, False, main_logger)  # Don't cleanup again
+        (output_filename, output_path), success = process_documents(file_paths, args.verbose, False, main_logger)  # Don't cleanup again
         
         if success:
             print(f"[SUCCESS] Processing completed successfully")
-            if args.verbose:
-                print(f"Output saved to: {output_path}")
+            print(f"Output filename: {output_filename}")
+            print(f"Output filepath: {output_path}")
         else:
-            print(f"[ERROR] Processing failed: {output_path}")
+            print(f"[ERROR] Processing failed: {output_filename}")
             sys.exit(1)
             
     except KeyboardInterrupt:
