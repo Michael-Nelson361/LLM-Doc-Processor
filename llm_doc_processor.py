@@ -20,6 +20,11 @@ import ollama
 from tqdm import tqdm
 
 
+def _clean_path(p: str) -> str:
+    """Clean and normalize file path by removing quotes and whitespace"""
+    return p.strip().strip('"').strip("'")
+
+
 class Logger:
     def __init__(self, verbose: bool = False, cleanup_logs: bool = False):
         self.verbose = verbose
@@ -212,18 +217,19 @@ class LLMDocumentProcessor:
     
     def _read_document(self, filepath: str) -> str:
         """Read content from a document (text or PDF)"""
-        file_path = Path(filepath)
+        cleaned_filepath = _clean_path(filepath)
+        file_path = Path(cleaned_filepath).expanduser().resolve()
         
         if not file_path.exists():
-            error_msg = f"File not found: {filepath}"
+            error_msg = f"File not found: {cleaned_filepath}"
             self.logger.error(error_msg)
             raise FileNotFoundError(error_msg)
         
-        self.logger.info(f"Reading document: {filepath}")
+        self.logger.info(f"Reading document: {cleaned_filepath}")
         if file_path.suffix.lower() == '.pdf':
-            return self._read_pdf_file(filepath)
+            return self._read_pdf_file(str(file_path))
         else:
-            return self._read_text_file(filepath)
+            return self._read_text_file(str(file_path))
     
     def _generate_response(self, prompt: str, documents: List[str]) -> str:
         """Generate AI response using the prompt and documents via Ollama"""
@@ -348,10 +354,10 @@ def get_file_paths_interactive(verbose: bool = False, logger: Logger = None) -> 
     
     if verbose:
         io.print("LLM Document Processor")
-        io.print("Enter file paths one by one (press Enter with no input to finish):")
+        io.print("Enter file paths one by one (without quotes, press Enter with no input to finish):")
     else:
         io.print("LLM Document Processor - Interactive Mode")
-        io.print("Enter file paths (empty line to finish):")
+        io.print("Enter file paths without quotes (empty line to finish):")
     
     while True:
         if not file_paths:
@@ -362,7 +368,16 @@ def get_file_paths_interactive(verbose: bool = False, logger: Logger = None) -> 
         if not filepath:
             break
         
-        file_paths.append(filepath)
+        # Clean and validate the path immediately
+        cleaned_filepath = _clean_path(filepath)
+        normalized_path = Path(cleaned_filepath).expanduser().resolve()
+        
+        if not normalized_path.exists():
+            io.print(f"Error: File not found: {cleaned_filepath}")
+            io.print("Please enter a valid file path.")
+            continue
+        
+        file_paths.append(cleaned_filepath)
     
     return file_paths
 
